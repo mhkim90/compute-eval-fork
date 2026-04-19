@@ -1,0 +1,66 @@
+task_id: "CUTLASS-CONV2D/1"
+date: "2026-04-19"
+type: cuda_cpp
+group: cuda-kernels
+prompt: |
+  Implement a half-precision (FP16) 2D forward convolution using the CUTLASS library.
+
+  The function signature is defined in `include/conv2d_fp16.h`:
+  ```cuda
+  #include <cuda_fp16.h>
+  void conv2d_cutlass_fp16_whcn(
+      const __half* input,
+      const __half* filter,
+      __half*       output,
+      int N, int H, int W, int C_in,
+      int K, int R, int S,
+      int pad_h,    int pad_w,
+      int stride_h, int stride_w,
+      cudaStream_t stream);
+  ```
+
+  ALL tensors use **WHCN column-major layout** (equivalent to NCHW row-major):
+  - input:   [W, H, C_in, N]  col-major  →  element[n,c,h,w] at offset w + W*h + W*H*c + W*H*C*n
+  - filter:  [S, R, C_in, K]  col-major  →  element[k,c,r,s] at offset s + S*r + S*R*c + S*R*C*k
+  - output:  [Q, P, K,    N]  col-major  →  element[n,k,p,q] at offset q + Q*p + Q*P*k + Q*P*K*n
+  where P = (H + 2*pad_h - R)/stride_h + 1, Q = (W + 2*pad_w - S)/stride_w + 1
+
+  Use FP16 for input/filter/output and float for accumulation.
+  CUTLASS conv2d requires NHWC layout internally. Your implementation must:
+  1. Allocate temporary NHWC __half device buffers for input, filter, and output.
+  2. Convert input and filter from NCHW to NHWC using a CUDA kernel.
+  3. Call CUTLASS 3.x implicit GEMM convolution with FP16 I/O and float accumulation
+     (use cutlass/conv/device/implicit_gemm_convolution.h).
+  4. Convert the NHWC __half output back to NCHW.
+  5. Free temporary buffers.
+
+  The solution will be tested against a cuDNN FP16 reference with 0.1% relative tolerance
+  across a progressive sweep of sizes:
+  - Input spatial: 3 to 32768
+  - Filter: 3 to 255 (always odd)
+  - Channels: 1 to 32
+  - Batch: 1 to 2048
+
+build_command: >
+  nvcc -std=c++17
+  -I include
+  -I /usr/local/cutlass/include
+  -I /usr/local/cutlass/tools/util/include
+  -o test.out solution.cu test/test_main.cu
+  -lcudnn
+  -arch=sm_80
+
+test_command: "./test.out"
+timeout_seconds: 300.0
+min_cuda_toolkit: "12.0"
+compute_capability: "8.0"
+
+source_references:
+  any:
+    - cutlass::conv::device::ImplicitGemmConvolution
+    - cutlass::conv::kernel::ImplicitGemmConvolution
+
+metadata:
+  difficulty: hard
+  tags: [cutlass, convolution, fp16, half-precision, nhwc, nchw, whcn, implicit-gemm, layout-conversion, progressive-test]
+  releases: []
