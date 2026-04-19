@@ -47,34 +47,44 @@ static void cudnn_fp16_reference(
     CHECK_CUDNN(cudnnSetConvolution2dDescriptor(cD,
         pad_h, pad_w, stride_h, stride_w, 1, 1,
         CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT)); // float math for FP16
-    CHECK_CUDNN(cudnnSetConvolutionMathType(cD, CUDNN_TENSOR_OP_MATH));
+    CHECK_CUDNN(cudnnSetConvolutionMathType(cD, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 
-    // Benchmark all supported algorithms and pick the fastest
+    // Use deterministic algorithm selection (no timing benchmarking)
     const int kMaxAlgos = 8;
     int retN = 0;
     cudnnConvolutionFwdAlgoPerf_t perfs[kMaxAlgos];
-    CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
+    CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithm_v7(
         handle, xD, wD, cD, yD, kMaxAlgos, &retN, perfs));
 
-    if (retN == 0) {
-        fprintf(stderr, "cuDNN error: no convolution forward algorithms returned\n");
-        exit(1);
-    }
-
-    cudnnConvolutionFwdAlgo_t algo;
-    size_t wsSize = 0;
+    cudnnConvolutionFwdAlgo_t algo = perfs[0].algo;
+    size_t wsSize = perfs[0].memory;
     float bestTime = FLT_MAX;
     bool foundAlgo = false;
+    // Prefer deterministic algorithms
     for (int i = 0; i < retN; i++) {
-        if (perfs[i].status == CUDNN_STATUS_SUCCESS && perfs[i].time < bestTime) {
+        if (perfs[i].status == CUDNN_STATUS_SUCCESS &&
+            perfs[i].determinism == CUDNN_DETERMINISTIC &&
+            perfs[i].time < bestTime) {
             algo      = perfs[i].algo;
             wsSize    = perfs[i].memory;
             bestTime  = perfs[i].time;
             foundAlgo = true;
         }
     }
+    // Fallback to any successful algo
     if (!foundAlgo) {
-        fprintf(stderr, "cuDNN error: no successful convolution forward algorithm found\n");
+        bestTime = FLT_MAX;
+        for (int i = 0; i < retN; i++) {
+            if (perfs[i].status == CUDNN_STATUS_SUCCESS && perfs[i].time < bestTime) {
+                algo      = perfs[i].algo;
+                wsSize    = perfs[i].memory;
+                bestTime  = perfs[i].time;
+                foundAlgo = true;
+            }
+        }
+    }
+    if (!foundAlgo) {
+        fprintf(stderr, "cuDNN FP16 error: no algorithm found\n");
         exit(1);
     }
 
@@ -153,6 +163,26 @@ static bool run_test(
     std::vector<__half> h_cut(out_sz), h_dnn(out_sz);
     CHECK_CUDA(cudaMemcpy(h_cut.data(), d_cutlass, out_sz * sizeof(__half), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_dnn.data(), d_cudnn,   out_sz * sizeof(__half), cudaMemcpyDeviceToHost));
+
+    // ── Determinism check: run CUTLASS a second time, verify bit-identical output ──
+    __half* d_cutlass2;
+    CHECK_CUDA(cudaMalloc(&d_cutlass2, out_sz * sizeof(__half)));
+    conv2d_cutlass_fp16_whcn(d_in, d_flt, d_cutlass2,
+                             N, H, W, C, K, R, S,
+                             pad_h, pad_w, stride_h, stride_w);
+    CHECK_CUDA(cudaDeviceSynchronize());
+    std::vector<__half> h_cut2(out_sz);
+    CHECK_CUDA(cudaMemcpy(h_cut2.data(), d_cutlass2, out_sz*sizeof(__half), cudaMemcpyDeviceToHost));
+    cudaFree(d_cutlass2);
+
+    for (size_t i = 0; i < out_sz; i++) {
+        if (__half2float(h_cut[i]) != __half2float(h_cut2[i])) {
+            fprintf(stderr, "FAIL (non-deterministic): output differs between runs at idx=%zu"
+                    " run1=%.6f run2=%.6f\n", i,
+                    __half2float(h_cut[i]), __half2float(h_cut2[i]));
+            return false;
+        }
+    }
 
     cudaFree(d_in); cudaFree(d_flt); cudaFree(d_cutlass); cudaFree(d_cudnn);
 

@@ -179,6 +179,13 @@ void conv2d_cutlass_whcn(
         exit(1);
     }
 
+    // Ensure deterministic completion before output layout conversion
+    if (stream) {
+        cudaStreamSynchronize(stream);
+    } else {
+        cudaDeviceSynchronize();
+    }
+
     // Convert output: NHWC → NCHW (WHCN col-major)
     nhwc_to_nchw(d_output_nhwc, output, N, K, P, Q, stream);
 

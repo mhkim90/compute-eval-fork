@@ -59,39 +59,43 @@ static void conv2d_cudnn_nchw_reference(
         pad_h, pad_w, stride_h, stride_w,
         /*dilation_h=*/1, /*dilation_w=*/1,
         CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+    CHECK_CUDNN(cudnnSetConvolutionMathType(convDesc, CUDNN_DEFAULT_MATH));
 
-    // Find the best algorithm using cudnnFindConvolutionForwardAlgorithm,
-    // which benchmarks all supported algos and returns the fastest.
+    // Use deterministic algorithm selection (no timing-based benchmarking)
+    const int kMaxAlgos = 8;
+    int retN = 0;
+    cudnnConvolutionFwdAlgoPerf_t perfs[kMaxAlgos];
+    CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithm_v7(
+        handle, xDesc, wDesc, convDesc, yDesc, kMaxAlgos, &retN, perfs));
 
-    // Step 1: find best algo via benchmarking
-    const int kRequestedAlgoCount = 8;
-    int returnedAlgoCount = 0;
-    cudnnConvolutionFwdAlgoPerf_t algoPerfs[kRequestedAlgoCount];
-    CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
-        handle, xDesc, wDesc, convDesc, yDesc,
-        kRequestedAlgoCount, &returnedAlgoCount, algoPerfs));
-
-    if (returnedAlgoCount == 0) {
-        fprintf(stderr, "cuDNN error: no convolution forward algorithms returned\n");
-        exit(1);
-    }
-
-    // Pick the fastest successful algorithm
+    // Pick fastest deterministic algorithm
     cudnnConvolutionFwdAlgo_t algo;
     size_t wsSize = 0;
     float bestTime = FLT_MAX;
     bool foundAlgo = false;
-    for (int i = 0; i < returnedAlgoCount; i++) {
-        if (algoPerfs[i].status == CUDNN_STATUS_SUCCESS &&
-            algoPerfs[i].time < bestTime) {
-            algo      = algoPerfs[i].algo;
-            wsSize    = algoPerfs[i].memory;
-            bestTime  = algoPerfs[i].time;
+    for (int i = 0; i < retN; i++) {
+        if (perfs[i].status == CUDNN_STATUS_SUCCESS &&
+            perfs[i].determinism == CUDNN_DETERMINISTIC &&
+            perfs[i].time < bestTime) {
+            algo      = perfs[i].algo;
+            wsSize    = perfs[i].memory;
+            bestTime  = perfs[i].time;
             foundAlgo = true;
         }
     }
+    // Fallback: if no deterministic algo, pick fastest successful one
     if (!foundAlgo) {
-        fprintf(stderr, "cuDNN error: no successful convolution forward algorithm found\n");
+        for (int i = 0; i < retN; i++) {
+            if (perfs[i].status == CUDNN_STATUS_SUCCESS && perfs[i].time < bestTime) {
+                algo      = perfs[i].algo;
+                wsSize    = perfs[i].memory;
+                bestTime  = perfs[i].time;
+                foundAlgo = true;
+            }
+        }
+    }
+    if (!foundAlgo) {
+        fprintf(stderr, "cuDNN error: no convolution forward algorithm found\n");
         exit(1);
     }
 
@@ -155,21 +159,48 @@ static void run_test(
     CHECK_CUDA(cudaMemcpy(h_cut.data(), d_cutlass, out_sz * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_dnn.data(), d_cudnn,   out_sz * sizeof(float), cudaMemcpyDeviceToHost));
 
-    float max_err = 0.f;
-    size_t max_idx = 0;
+    // ── Determinism check: run CUTLASS a second time, verify bit-identical output ──
+    float* d_cutlass2;
+    CHECK_CUDA(cudaMalloc(&d_cutlass2, out_sz * sizeof(float)));
+    conv2d_cutlass_whcn(d_in, d_flt, d_cutlass2,
+                        N, H, W, C, K, R, S,
+                        pad_h, pad_w, stride_h, stride_w);
+    CHECK_CUDA(cudaDeviceSynchronize());
+    std::vector<float> h_cut2(out_sz);
+    CHECK_CUDA(cudaMemcpy(h_cut2.data(), d_cutlass2, out_sz*sizeof(float), cudaMemcpyDeviceToHost));
+    cudaFree(d_cutlass2);
+
     for (size_t i = 0; i < out_sz; i++) {
-        float err = fabsf(h_cut[i] - h_dnn[i]);
-        if (err > max_err) { max_err = err; max_idx = i; }
+        if (h_cut[i] != h_cut2[i]) {
+            fprintf(stderr, "FAIL (non-deterministic): fp32 output differs between runs at idx=%zu"
+                    " run1=%.8f run2=%.8f\n", i, h_cut[i], h_cut2[i]);
+            cudaFree(d_in); cudaFree(d_flt); cudaFree(d_cutlass); cudaFree(d_cudnn);
+            exit(1);
+        }
     }
 
-    printf("  N=%d H=%d W=%d C=%d K=%d R=%d S=%d pad=(%d,%d) stride=(%d,%d) "
-           "-> max_err=%.6f (idx=%zu)\n",
-           N, H, W, C, K, R, S, pad_h, pad_w, stride_h, stride_w,
-           max_err, max_idx);
+    float max_rel_err = 0.f;
+    size_t max_idx = 0;
+    float max_cut_val = 0.f, max_dnn_val = 0.f;
+    for (size_t i = 0; i < out_sz; i++) {
+        float rel = fabsf(h_cut[i] - h_dnn[i]) / (fabsf(h_dnn[i]) + 1e-6f);
+        if (rel > max_rel_err) {
+            max_rel_err = rel;
+            max_idx = i;
+            max_cut_val = h_cut[i];
+            max_dnn_val = h_dnn[i];
+        }
+    }
 
-    const float kTol = 1e-3f;
-    if (max_err > kTol) {
-        fprintf(stderr, "FAIL: max error %.6f exceeds tolerance %.6f\n", max_err, kTol);
+    printf("  N=%d H=%d W=%d C=%d K=%d R=%d S=%d pad=(%d,%d) stride=(%d,%d)"
+           " -> max_rel_err=%.4f%% (idx=%zu cut=%.6f dnn=%.6f)\n",
+           N, H, W, C, K, R, S, pad_h, pad_w, stride_h, stride_w,
+           max_rel_err * 100.f, max_idx, max_cut_val, max_dnn_val);
+
+    const float kTol = 1e-3f;  // 0.1% relative
+    if (max_rel_err > kTol) {
+        fprintf(stderr, "FAIL: max relative error %.4f%% exceeds 0.1%% tolerance\n",
+                max_rel_err * 100.f);
         cudaFree(d_in); cudaFree(d_flt); cudaFree(d_cutlass); cudaFree(d_cudnn);
         exit(1);
     }

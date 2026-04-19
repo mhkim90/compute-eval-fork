@@ -31,6 +31,9 @@ prompt: |
   4. Convert the NHWC output back to NCHW and write into the output pointer.
   5. Free temporary buffers.
 
+  The solution will be tested against a cuDNN reference with **0.1% relative tolerance**.
+  The implementation must produce **deterministic** results (bit-identical outputs on repeated runs).
+
 build_command: >
   nvcc -std=c++17
   -I include
@@ -52,5 +55,5 @@ source_references:
 
 metadata:
   difficulty: hard
-  tags: [cutlass, convolution, nhwc, nchw, whcn, implicit-gemm, layout-conversion]
+  tags: [cutlass, convolution, nhwc, nchw, whcn, implicit-gemm, layout-conversion, relative-tolerance, deterministic]
   releases: []
