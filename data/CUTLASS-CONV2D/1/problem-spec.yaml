@@ -62,5 +62,5 @@ source_references:
 
 metadata:
   difficulty: hard
-  tags: [cutlass, convolution, fp16, half-precision, nhwc, nchw, whcn, implicit-gemm, layout-conversion, progressive-test]
+  tags: [cutlass, convolution, fp16, half-precision, nhwc, nchw, whcn, implicit-gemm, layout-conversion, progressive-test, deterministic]
   releases: []
