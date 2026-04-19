@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cfloat>
 #include <cmath>
 #include <vector>
 #include <cuda_runtime.h>
@@ -59,11 +60,41 @@ static void conv2d_cudnn_nchw_reference(
         /*dilation_h=*/1, /*dilation_w=*/1,
         CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
 
-    cudnnConvolutionFwdAlgo_t algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM;
+    // Find the best algorithm using cudnnFindConvolutionForwardAlgorithm,
+    // which benchmarks all supported algos and returns the fastest.
 
+    // Step 1: find best algo via benchmarking
+    const int kRequestedAlgoCount = 8;
+    int returnedAlgoCount = 0;
+    cudnnConvolutionFwdAlgoPerf_t algoPerfs[kRequestedAlgoCount];
+    CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
+        handle, xDesc, wDesc, convDesc, yDesc,
+        kRequestedAlgoCount, &returnedAlgoCount, algoPerfs));
+
+    if (returnedAlgoCount == 0) {
+        fprintf(stderr, "cuDNN error: no convolution forward algorithms returned\n");
+        exit(1);
+    }
+
+    // Pick the fastest successful algorithm
+    cudnnConvolutionFwdAlgo_t algo;
     size_t wsSize = 0;
-    CHECK_CUDNN(cudnnGetConvolutionForwardWorkspaceSize(
-        handle, xDesc, wDesc, convDesc, yDesc, algo, &wsSize));
+    float bestTime = FLT_MAX;
+    bool foundAlgo = false;
+    for (int i = 0; i < returnedAlgoCount; i++) {
+        if (algoPerfs[i].status == CUDNN_STATUS_SUCCESS &&
+            algoPerfs[i].time < bestTime) {
+            algo      = algoPerfs[i].algo;
+            wsSize    = algoPerfs[i].memory;
+            bestTime  = algoPerfs[i].time;
+            foundAlgo = true;
+        }
+    }
+    if (!foundAlgo) {
+        fprintf(stderr, "cuDNN error: no successful convolution forward algorithm found\n");
+        exit(1);
+    }
+
     void* workspace = nullptr;
     if (wsSize > 0) CHECK_CUDA(cudaMalloc(&workspace, wsSize));
 
