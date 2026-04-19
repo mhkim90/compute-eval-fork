@@ -46,9 +46,6 @@ env/
 # Ignore pycharm configurations
 .idea/
 
-# Ignore Claude files
-.claude/
-CLAUDE.md
 
 # Batch generation files
 .batch_generation_state.json
