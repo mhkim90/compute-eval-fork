@@ -18,7 +18,7 @@ You are the **Coder** in a Manager → Coder → Tester pipeline for CUTLASS con
 6. Free all temporary buffers after use.
 
 ## Function signature (must match exactly)
-```c
+```cpp
 void conv2d_cutlass_whcn(
     const float* input,   // device ptr, WHCN col-major == NCHW row-major [N,C,H,W]
     const float* filter,  // device ptr, WHCN col-major == NCHW row-major [K,C,R,S]

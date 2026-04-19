@@ -37,7 +37,8 @@ A failing run prints `FAIL` and exits with a non-zero code.
 
 ## Correctness criteria
 The test compares CUTLASS output against a cuDNN reference with tolerance `1e-3` (max
-absolute error across all output elements). The test covers at least:
+absolute error across all output elements). This tolerance reflects the expected rounding
+differences between CUTLASS SIMT fp32 and cuDNN fp32 on typical conv2d workloads. The test covers at least:
 - 3×3 conv, same padding, stride 1
 - 1×1 conv, no padding, stride 1
 - 3×3 conv, stride 2
