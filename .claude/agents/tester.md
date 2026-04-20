@@ -15,11 +15,14 @@ solution at `data/CUTLASS-CONV2D/0/solution/solution.cu`.
 
 Compile with nvcc, linking cuDNN and CUTLASS:
 ```bash
+source scripts/cutlass.env
+
 cd data/CUTLASS-CONV2D/0 && \
-nvcc -std=c++20 -ccbin g++-13 -O2 \
+nvcc -std=c++20 -O2 \
+  -ccbin g++-13 \
   -I include \
-  -I /usr/local/cutlass/include \
-  -I /usr/local/cutlass/tools/util/include \
+  -I $CUTLASS_HOME/include \
+  -I $CUTLASS_HOME/tools/util/include \
   -arch=sm_80 \
   solution/solution.cu test/test_main.cu \
   -lcudnn \
@@ -28,6 +31,7 @@ nvcc -std=c++20 -ccbin g++-13 -O2 \
 
 ## Run instructions
 ```bash
+source scripts/cutlass.env
 /tmp/conv2d_test
 ```
 
