@@ -35,11 +35,12 @@ prompt: |
   The implementation must produce **deterministic** results (bit-identical outputs on repeated runs).
 
 build_command: >
+  source scripts/cutlass.env &&
   nvcc -std=c++20
   -ccbin g++-13
   -I include
-  -I /usr/local/cutlass/include
-  -I /usr/local/cutlass/tools/util/include
+  -I $CUTLASS_HOME/include
+  -I $CUTLASS_HOME/tools/util/include
   -o test.out solution.cu test/test_main.cu
   -lcudnn
   -arch=sm_80

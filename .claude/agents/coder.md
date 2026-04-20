@@ -32,6 +32,8 @@ void conv2d_cutlass_whcn(
 
 ## Required CUTLASS headers
 ```cpp
+// Headers available after: source scripts/cutlass.env
+// Paths: $CUTLASS_HOME/include, $CUTLASS_HOME/tools/util/include
 #include "cutlass/conv/device/implicit_gemm_convolution.h"
 #include "cutlass/conv/conv2d_problem_size.h"
 #include "cutlass/conv/kernel/default_conv2d_fprop.h"
@@ -39,6 +41,7 @@ void conv2d_cutlass_whcn(
 ```
 
 ## CUTLASS type configuration (use these defaults unless otherwise specified)
+> Environment: `source scripts/cutlass.env` — sets `$CUTLASS_HOME`, `PATH`, `LD_LIBRARY_PATH`, `CUDAHOSTCXX`.
 > Compiled with `nvcc -std=c++20 -ccbin g++-13 -arch=sm_80`
 - `ElementInput / ElementFilter / ElementOutput / ElementAccum` = `float`
 - `LayoutInput / LayoutFilter / LayoutOutput` = `cutlass::layout::TensorNHWC`

@@ -5,6 +5,9 @@
 - **Host compiler**: GCC 13 (`g++-13`, `-ccbin g++-13`)
 - **C++ standard**: C++20 (`-std=c++20`)
 - **Compute capability**: sm_80 (`-arch=sm_80`)
+- **Environment**: `source scripts/cutlass.env` before any build or run step.
+  Sets `CUDA_HOME`, `CUTLASS_HOME`, `PATH`, `LD_LIBRARY_PATH`, `CUDAHOSTCXX`, etc.
+- **CUTLASS headers**: `$CUTLASS_HOME/include` and `$CUTLASS_HOME/tools/util/include`
 
 ## Tensor Layout
 - **Native format: WHCN column-major** (identical in memory to NCHW row-major).
