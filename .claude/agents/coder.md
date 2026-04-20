@@ -39,6 +39,7 @@ void conv2d_cutlass_whcn(
 ```
 
 ## CUTLASS type configuration (use these defaults unless otherwise specified)
+> Compiled with `nvcc -std=c++20 -ccbin g++-13 -arch=sm_80`
 - `ElementInput / ElementFilter / ElementOutput / ElementAccum` = `float`
 - `LayoutInput / LayoutFilter / LayoutOutput` = `cutlass::layout::TensorNHWC`
 - `MMAOp` = `cutlass::arch::OpClassSimt`

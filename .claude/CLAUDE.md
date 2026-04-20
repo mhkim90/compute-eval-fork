@@ -1,5 +1,11 @@
 # Project Conventions
 
+## Toolchain
+- **CUDA**: 12.x (`nvcc`, pre-installed)
+- **Host compiler**: GCC 13 (`g++-13`, `-ccbin g++-13`)
+- **C++ standard**: C++20 (`-std=c++20`)
+- **Compute capability**: sm_80 (`-arch=sm_80`)
+
 ## Tensor Layout
 - **Native format: WHCN column-major** (identical in memory to NCHW row-major).
   - `element[n,c,h,w]` → offset `w + W*h + W*H*c + W*H*C*n`
