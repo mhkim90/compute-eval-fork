@@ -15,7 +15,9 @@
 
 ## cuDNN Reference Rules (ALWAYS follow)
 1. Use `CUDNN_TENSOR_NCHW` — matches native WHCN col-major layout directly.
-2. Use `cudnnFindConvolutionForwardAlgorithm` — never hardcode an algorithm.
+2. Use `cudnnGetConvolutionForwardAlgorithm_v7` with `CUDNN_DETERMINISTIC` filter for
+   deterministic algorithm selection — never use `cudnnFindConvolutionForwardAlgorithm`
+   (timing-based, non-deterministic) and never hardcode an algorithm.
 3. Use `CUDNN_CROSS_CORRELATION` (not CONVOLUTION).
 
 ## Multi-Agent Workflow

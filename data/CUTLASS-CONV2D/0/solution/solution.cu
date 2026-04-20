@@ -1,4 +1,5 @@
 #include "include/conv2d.h"
+#include "include/layout_utils.cuh"
 
 #include <cuda_runtime.h>
 #include <cstdio>
@@ -20,60 +21,6 @@
 #include "cutlass/conv/kernel/default_conv2d_fprop.h"
 #include "cutlass/epilogue/thread/linear_combination.h"
 #include "cutlass/gemm/device/gemm.h"
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Layout conversion kernels: NCHW (== WHCN col-major) <-> NHWC
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// NCHW → NHWC
-__global__ void nchw_to_nhwc_kernel(
-    const float* __restrict__ src,   // [N, C, H, W]
-    float*       __restrict__ dst,   // [N, H, W, C]
-    int N, int C, int H, int W)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = N * C * H * W;
-    if (idx >= total) return;
-
-    int w = idx % W;
-    int h = (idx / W) % H;
-    int c = (idx / (W * H)) % C;
-    int n = idx / (W * H * C);
-
-    dst[n*(H*W*C) + h*(W*C) + w*C + c] = src[idx];
-}
-
-/// NHWC → NCHW
-__global__ void nhwc_to_nchw_kernel(
-    const float* __restrict__ src,   // [N, H, W, C]
-    float*       __restrict__ dst,   // [N, C, H, W]
-    int N, int C, int H, int W)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = N * C * H * W;
-    if (idx >= total) return;
-
-    int c = idx % C;
-    int w = (idx / C) % W;
-    int h = (idx / (C * W)) % H;
-    int n = idx / (C * W * H);
-
-    dst[n*(C*H*W) + c*(H*W) + h*W + w] = src[idx];
-}
-
-static void nchw_to_nhwc(const float* src, float* dst,
-                          int N, int C, int H, int W, cudaStream_t stream)
-{
-    int total = N * C * H * W;
-    nchw_to_nhwc_kernel<<<(total + 255) / 256, 256, 0, stream>>>(src, dst, N, C, H, W);
-}
-
-static void nhwc_to_nchw(const float* src, float* dst,
-                          int N, int C, int H, int W, cudaStream_t stream)
-{
-    int total = N * C * H * W;
-    nhwc_to_nchw_kernel<<<(total + 255) / 256, 256, 0, stream>>>(src, dst, N, C, H, W);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CUTLASS Conv2d type definitions (sm80, fp32, NHWC)
