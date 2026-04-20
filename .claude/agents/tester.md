@@ -15,17 +15,16 @@ solution at `data/CUTLASS-CONV2D/0/solution/solution.cu`.
 
 Compile with nvcc, linking cuDNN and CUTLASS:
 ```bash
+cd data/CUTLASS-CONV2D/0 && \
 nvcc -std=c++17 -O2 \
-  -I data/CUTLASS-CONV2D/0/context \
-  -I <cutlass_include_dir> \
-  data/CUTLASS-CONV2D/0/solution/solution.cu \
-  data/CUTLASS-CONV2D/0/test/test_main.cu \
+  -I include \
+  -I /usr/local/cutlass/include \
+  -I /usr/local/cutlass/tools/util/include \
+  -arch=sm_80 \
+  solution/solution.cu test/test_main.cu \
   -lcudnn \
   -o /tmp/conv2d_test
 ```
-
-Adjust `<cutlass_include_dir>` to the actual CUTLASS headers location on the system
-(common paths: `/usr/local/cutlass/include`, `$CUTLASS_HOME/include`).
 
 ## Run instructions
 ```bash
@@ -36,9 +35,9 @@ A passing run prints `PASS` on the last line and exits with code 0.
 A failing run prints `FAIL` and exits with a non-zero code.
 
 ## Correctness criteria
-The test compares CUTLASS output against a cuDNN reference with tolerance `1e-3` (max
-absolute error across all output elements). This tolerance reflects the expected rounding
-differences between CUTLASS SIMT fp32 and cuDNN fp32 on typical conv2d workloads. The test covers at least:
+The test compares CUTLASS output against a cuDNN reference with tolerance 0.1% (max relative
+error, i.e. |cutlass - cudnn| / (|cudnn| + 1e-6) ≤ 1e-3). This tolerance reflects the expected
+rounding differences between CUTLASS SIMT fp32 and cuDNN fp32 on typical conv2d workloads. The test covers at least:
 - 3×3 conv, same padding, stride 1
 - 1×1 conv, no padding, stride 1
 - 3×3 conv, stride 2
