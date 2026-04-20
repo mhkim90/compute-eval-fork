@@ -16,7 +16,7 @@ solution at `data/CUTLASS-CONV2D/0/solution/solution.cu`.
 Compile with nvcc, linking cuDNN and CUTLASS:
 ```bash
 cd data/CUTLASS-CONV2D/0 && \
-nvcc -std=c++17 -O2 \
+nvcc -std=c++20 -ccbin g++-13 -O2 \
   -I include \
   -I /usr/local/cutlass/include \
   -I /usr/local/cutlass/tools/util/include \

@@ -35,7 +35,8 @@ prompt: |
   The implementation must produce **deterministic** results (bit-identical outputs on repeated runs).
 
 build_command: >
-  nvcc -std=c++17
+  nvcc -std=c++20
+  -ccbin g++-13
   -I include
   -I /usr/local/cutlass/include
   -I /usr/local/cutlass/tools/util/include
