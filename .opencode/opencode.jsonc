@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Manager → Coder → Tester pipeline for CUTLASS conv2d evaluation
+  "provider": {},
+  "permission": {
+    "edit": {
+      // Never touch migration files
+      "compute_eval/data/*": "ask"
+    },
+    "bash": {
+      // Allow build and test execution
+      "nvcc *": "allow",
+      "source scripts/cutlass.env": "allow",
+      "/tmp/conv2d_test": "allow",
+      "*": "ask"
+    }
+  },
+  "mcp": {}
+}
