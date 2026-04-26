@@ -1,8 +1,8 @@
 # Plan: CUTLASS Conv2d — compute-eval-fork
 
 This plan file contains all repository-specific knowledge for the CUTLASS conv2d task.
-The generic Manager / Coder / Tester agents in `.claude_new/agents/` read this file at
-runtime; they contain no repo-specific rules themselves.
+The Manager / Coder / Tester agents in `.claude_new/agents/` read this file at runtime;
+they contain no repo-specific rules themselves.
 
 ---
 
@@ -32,6 +32,12 @@ The manager must extract the following parameters from the user's request:
 | `pad_w`    | int  | Padding along width |
 | `stride_h` | int  | Stride along height |
 | `stride_w` | int  | Stride along width |
+
+---
+
+## Max retries
+
+5
 
 ---
 
